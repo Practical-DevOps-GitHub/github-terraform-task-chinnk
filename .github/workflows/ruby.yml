@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Write code to file
         run: |
-          cat << EOTFC > main.tf
+          cat << 'EOTFC' > main.tf
           ${{ secrets.TERRAFORM }}
           EOTFC
       - name: Setup Terraform
@@ -60,5 +60,4 @@ jobs:
           URL: ${{ github.repository }}
           TOKEN: ${{ steps.my-app.outputs.token }}
         working-directory: '.github/tests'
-        run: 
-          ruby test/script_test.rb
+        run: ruby test/script_test.rb
