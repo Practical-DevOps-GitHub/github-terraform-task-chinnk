@@ -3,7 +3,7 @@ data "github_repository" "this" {
   full_name = "${var.github_owner}/${var.repository_name}"
 }
 
-# develop branch + set as default
+# 1. develop + default branch
 resource "github_branch" "develop" {
   repository    = data.github_repository.this.name
   branch        = "develop"
@@ -15,114 +15,103 @@ resource "github_branch_default" "default" {
   branch     = github_branch.develop.branch
 }
 
-# Collaborator softservedata
+# 2. Collaborator — має бути admin
 resource "github_repository_collaborator" "softservedata" {
   repository = data.github_repository.this.name
   username   = "softservedata"
-  permission = "admin" 
+  permission = "admin"
 }
 
-# Branch protection: develop
+# 3. Branch protection develop — 2 approvals
 resource "github_branch_protection" "develop" {
-  repository_id = data.github_repository.this.node_id
-  pattern       = "develop"
-
-  allows_deletions    = false
-  allows_force_pushes = false
-  enforce_admins      = true
+  repository_id                   = data.github_repository.this.node_id
+  pattern                         = "develop"
+  enforce_admins                  = true
+  allows_deletions                = false
+  allows_force_pushes             = false
+  require_conversation_resolution = true
 
   required_pull_request_reviews {
     dismiss_stale_reviews           = true
     required_approving_review_count = 2
-    require_code_owner_reviews      = false
   }
-
-  require_conversation_resolution = true
-  
 }
 
-# Branch protection: main
+# 4. Branch protection main — 1 approval + code owner review
 resource "github_branch_protection" "main" {
-  repository_id = data.github_repository.this.node_id
-  pattern       = "main"
-  enforce_admins = true
+  repository_id                   = data.github_repository.this.node_id
+  pattern                         = "main"
+  enforce_admins                  = true
+  allows_deletions                = false
+  allows_force_pushes             = false
+  require_conversation_resolution = true
 
   required_pull_request_reviews {
     dismiss_stale_reviews           = true
     required_approving_review_count = 1
     require_code_owner_reviews      = true
-
+  }
 }
 
-# CODEOWNERS file
+# 5. CODEOWNERS 
 resource "github_repository_file" "codeowners" {
   repository          = data.github_repository.this.name
+  branch              = "main"
   file                = ".github/CODEOWNERS"
-  branch              = "main"
-  content             = "* @softservedata\n"
-  commit_message      = "Add CODEOWNERS file assigning softservedata"
+  content             = "* @softservedata"
+  commit_message      = "Add CODEOWNERS"
   overwrite_on_create = true
 }
 
-# Pull request template
-resource "github_repository_file" "pull_request_template" {
+# 6. PR Template 
+resource "github_repository_file" "pr_template" {
   repository          = data.github_repository.this.name
-  file                = ".github/pull_request_template.md"
   branch              = "main"
-  commit_message      = "Add pull request template"
+  file                = ".github/pull_request_template.md"
+  content             = <<-EOT
+### Describe your changes
+
+### Issue ticket number and link
+
+### Checklist before requesting a review
+- [ ] I have performed a self-review of my code
+- [ ] If it is a core feature, I have added thorough tests
+- [ ] Do we need to implement analytics?
+- [ ] Will this be part of a product update? If yes, please write one phrase about this update.
+EOT
+  commit_message      = "Add PR template"
   overwrite_on_create = true
-
-  content = <<-EOT
-  ## Describe your changes
-
-  Please provide a clear and concise description of the changes you are making.
-
-  ## Issue ticket number and link
-
-  - Ticket:
-
-  ## Checklist before requesting a review
-
-  - [ ] I have performed a self-review of my code
-  - [ ] If it is a core feature, I have added thorough tests
-  - [ ] Do we need to implement analytics?
-  - [ ] Will this be part of a product update? If yes, please write one phrase about this update
-  EOT
 }
 
-# Deploy key
+# 7. Deploy key — write access
 resource "github_repository_deploy_key" "deploy_key" {
   repository = data.github_repository.this.name
   title      = "DEPLOY_KEY"
   key        = var.deploy_key_public
-  read_only  = false  
+  read_only  = false
 }
 
-# GitHub Actions secrets
+# 8. Secret
 resource "github_actions_secret" "pat" {
   repository      = data.github_repository.this.name
   secret_name     = "PAT"
   plaintext_value = var.pat_token
 }
 
-resource "github_actions_secret" "terraform_code" {
+resource "github_actions_secret" "terraform_secret" {
   repository      = data.github_repository.this.name
   secret_name     = "TERRAFORM"
-  plaintext_value = file("${path.module}/main.tf")
+  plaintext_value = file("main.tf")  
 }
 
-# Discord webhook for PR notifications
-resource "github_repository_webhook" "discord_pr" {
+# 9. Discord webhook
+resource "github_repository_webhook" "discord" {
   repository = data.github_repository.this.name
   active     = true
-
-  events = [
-    "pull_request",
-  ]
+  events     = ["pull_request"]
 
   configuration {
     url          = var.discord_webhook_url
     content_type = "json"
-    insecure_ssl = false
   }
 }
