@@ -37,7 +37,7 @@ resource "github_branch_protection" "develop" {
   }
 }
 
-# 4. Branch protection main — 1 approval + code owner review
+# 4. Branch protection main — без approvals (0)
 resource "github_branch_protection" "main" {
   repository_id                   = data.github_repository.this.node_id
   pattern                         = "main"
@@ -48,12 +48,22 @@ resource "github_branch_protection" "main" {
 
   required_pull_request_reviews {
     dismiss_stale_reviews           = true
-    required_approving_review_count = 1
-    require_code_owner_reviews      = true
+    required_approving_review_count = 0
+    require_code_owner_reviews      = false
   }
 }
 
-# 5. CODEOWNERS 
+# 5.  .github (placeholder-file)
+resource "github_repository_file" "github_folder_placeholder" {
+  repository          = data.github_repository.this.name
+  branch              = "main"
+  file                = ".github/.placeholder"
+  content             = "placeholder"
+  commit_message      = "Create .github folder"
+  overwrite_on_create = true
+}
+
+# 6. CODEOWNERS (in .github/)
 resource "github_repository_file" "codeowners" {
   repository          = data.github_repository.this.name
   branch              = "main"
@@ -63,7 +73,7 @@ resource "github_repository_file" "codeowners" {
   overwrite_on_create = true
 }
 
-# 6. PR Template 
+# 7. PR Template (in .github/)
 resource "github_repository_file" "pr_template" {
   repository          = data.github_repository.this.name
   branch              = "main"
@@ -83,7 +93,7 @@ EOT
   overwrite_on_create = true
 }
 
-# 7. Deploy key — write access (read_only = false)
+# 8. Deploy key — write access (read_only = false)
 resource "github_repository_deploy_key" "deploy_key" {
   repository = data.github_repository.this.name
   title      = "DEPLOY_KEY"
@@ -91,14 +101,14 @@ resource "github_repository_deploy_key" "deploy_key" {
   read_only  = false
 }
 
-# 8. Secret PAT
+# 9. Secret PAT
 resource "github_actions_secret" "pat" {
   repository      = data.github_repository.this.name
   secret_name     = "PAT"
   plaintext_value = var.pat_token
 }
 
-# 9. Discord webhook
+# 10. Discord webhook
 resource "github_repository_webhook" "discord" {
   repository = data.github_repository.this.name
   active     = true
@@ -110,7 +120,7 @@ resource "github_repository_webhook" "discord" {
   }
 }
 
-# 10. Required variables for repository identification
+# 11. Required variables for repository identification
 variable "github_owner" {
   type    = string
   default = "Practical-DevOps-GitHub"
@@ -121,7 +131,7 @@ variable "repository_name" {
   default = "github-terraform-task-chinnk"
 }
 
-# 11. Required variables for secrets/webhook (dummy values)
+# 12. Required variables for secrets/webhook (dummy values)
 variable "pat_token" {
   type    = string
   default = "dummy-pat"
