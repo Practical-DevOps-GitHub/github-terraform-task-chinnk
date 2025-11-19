@@ -109,3 +109,18 @@ resource "github_repository_webhook" "discord" {
     content_type = "json"
   }
 }
+# 10. Required variables
+variable "pat_token" {
+  type    = string
+  default = "dummy-pat"
+}
+
+variable "deploy_key_public" {
+  type    = string
+  default = "ssh-ed25519 AAAATESTKEY"
+}
+
+variable "discord_webhook_url" {
+  type    = string
+  default = "https://example.com/webhook"
+}
