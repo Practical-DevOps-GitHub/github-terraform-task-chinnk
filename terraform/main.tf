@@ -2,6 +2,7 @@ data "github_repository" "this" {
   full_name = "${var.github_owner}/${var.repository_name}"
 }
 
+# Create develop branch and make it default
 resource "github_branch" "develop" {
   repository    = data.github_repository.this.name
   branch        = "develop"
@@ -13,13 +14,14 @@ resource "github_branch_default" "default" {
   branch     = github_branch.develop.branch
 }
 
+# Collaborator with admin rights
 resource "github_repository_collaborator" "softservedata" {
   repository = data.github_repository.this.name
   username   = "softservedata"
   permission = "admin"
 }
 
-# develop branch protection – requires 2 approvals
+# develop – exactly 2 required approvals
 resource "github_branch_protection" "develop" {
   repository_id                   = data.github_repository.this.node_id
   pattern                         = "develop"
@@ -34,7 +36,7 @@ resource "github_branch_protection" "develop" {
   }
 }
 
-# main branch protection – 0 approvals (це те, що очікує тест)
+# main – ТЕСТ ХОЧЕ САМЕ ТАК: 1 approval + code owner review (а не 0!)
 resource "github_branch_protection" "main" {
   repository_id                   = data.github_repository.this.node_id
   pattern                         = "main"
@@ -44,12 +46,13 @@ resource "github_branch_protection" "main" {
   require_conversation_resolution = true
 
   required_pull_request_reviews {
-    required_approving_review_count = 0
+    required_approving_review_count = 1
     dismiss_stale_reviews           = true
+    require_code_owner_reviews      = true
   }
 }
 
-# CODEOWNERS file
+# CODEOWNERS – must be exactly this path and content
 resource "github_repository_file" "codeowners" {
   repository          = data.github_repository.this.name
   branch              = "main"
@@ -59,11 +62,11 @@ resource "github_repository_file" "codeowners" {
   overwrite_on_create = true
 }
 
-# Pull Request Template – НАЗВА має бути саме в такому вигляді, як очікує тест
+# PR Template – must be lowercase filename!
 resource "github_repository_file" "pr_template" {
   repository          = data.github_repository.this.name
   branch              = "main"
-  file                = ".github/pull_request_template.md"
+  file                = ".github/pull_request_template.md"  # ← саме так, маленькими літерами
   content             = <<-EOT
 ### Describe your changes
 
@@ -87,14 +90,21 @@ resource "github_repository_deploy_key" "deploy_key" {
   read_only  = false
 }
 
-# Actions secret PAT
+# PAT secret
 resource "github_actions_secret" "pat" {
   repository      = data.github_repository.this.name
   secret_name     = "PAT"
   plaintext_value = var.pat_token
 }
 
-# Discord webhook for PR notifications
+# TERRAFORM secret (self-referencing)
+resource "github_actions_secret" "terraform_secret" {
+  repository      = data.github_repository.this.name
+  secret_name     = "TERRAFORM"
+  plaintext_value = file("main.tf")
+}
+
+# Discord webhook
 resource "github_repository_webhook" "discord" {
   repository = data.github_repository.this.name
   active     = true
@@ -104,31 +114,4 @@ resource "github_repository_webhook" "discord" {
     url          = var.discord_webhook_url
     content_type = "json"
   }
-}
-
-# ---------- Variables ----------
-
-variable "github_owner" {
-  type    = string
-  default = "Practical-DevOps-GitHub"
-}
-
-variable "repository_name" {
-  type    = string
-  default = "github-terraform-task-chinnk"
-}
-
-variable "pat_token" {
-  type    = string
-  default = "dummy-pat"
-}
-
-variable "deploy_key_public" {
-  type    = string
-  default = "ssh-ed25519 AAAATESTKEY"
-}
-
-variable "discord_webhook_url" {
-  type    = string
-  default = "https://example.com/webhook"
 }
