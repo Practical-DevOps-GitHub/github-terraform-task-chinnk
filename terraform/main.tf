@@ -42,16 +42,13 @@ resource "github_branch_protection" "develop" {
   }
 }
 
-# -------- Branch protection: main (NO approvals, тільки PR) --------
-
 resource "github_branch_protection" "main" {
-  repository_id                   = data.github_repository.this.node_id
-  pattern                         = "main"
-  enforce_admins                  = true
-  allows_deletions                = false
-  allows_force_pushes             = false
-  require_conversation_resolution = true
-  # БЕЗ required_pull_request_reviews — цього хоче тест
+  repository_id = data.github_repository.this.node_id
+  pattern       = "main"
+
+  enforce_admins       = true
+  allows_deletions     = false
+  allows_force_pushes  = false
 }
 
 # -------- CODEOWNERS --------
