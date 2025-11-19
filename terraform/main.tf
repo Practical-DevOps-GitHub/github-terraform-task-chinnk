@@ -38,7 +38,7 @@ resource "github_branch_protection" "develop" {
   }
 
   require_conversation_resolution = true
-  required_status_checks          = []
+  
 }
 
 # Branch protection: main
@@ -57,7 +57,7 @@ resource "github_branch_protection" "main" {
   }
 
   require_conversation_resolution = true
-  required_status_checks          = []
+
 }
 
 # CODEOWNERS file
