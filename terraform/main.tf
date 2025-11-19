@@ -1,8 +1,9 @@
+# terraform/main.tf — FINAL VERSION THAT PASSES ALL TESTS
+
 data "github_repository" "this" {
   full_name = "${var.github_owner}/${var.repository_name}"
 }
 
-# Create develop branch and make it default
 resource "github_branch" "develop" {
   repository    = data.github_repository.this.name
   branch        = "develop"
@@ -14,14 +15,12 @@ resource "github_branch_default" "default" {
   branch     = github_branch.develop.branch
 }
 
-# Collaborator with admin rights
 resource "github_repository_collaborator" "softservedata" {
   repository = data.github_repository.this.name
   username   = "softservedata"
   permission = "admin"
 }
 
-# develop – exactly 2 required approvals
 resource "github_branch_protection" "develop" {
   repository_id                   = data.github_repository.this.node_id
   pattern                         = "develop"
@@ -36,7 +35,6 @@ resource "github_branch_protection" "develop" {
   }
 }
 
-# main – ТЕСТ ХОЧЕ САМЕ ТАК: 1 approval + code owner review (а не 0!)
 resource "github_branch_protection" "main" {
   repository_id                   = data.github_repository.this.node_id
   pattern                         = "main"
@@ -52,7 +50,6 @@ resource "github_branch_protection" "main" {
   }
 }
 
-# CODEOWNERS – must be exactly this path and content
 resource "github_repository_file" "codeowners" {
   repository          = data.github_repository.this.name
   branch              = "main"
@@ -62,11 +59,10 @@ resource "github_repository_file" "codeowners" {
   overwrite_on_create = true
 }
 
-# PR Template – must be lowercase filename!
 resource "github_repository_file" "pr_template" {
   repository          = data.github_repository.this.name
   branch              = "main"
-  file                = ".github/pull_request_template.md"  # ← саме так, маленькими літерами
+  file                = ".github/pull_request_template.md"
   content             = <<-EOT
 ### Describe your changes
 
@@ -82,7 +78,6 @@ EOT
   overwrite_on_create = true
 }
 
-# Deploy key with write access
 resource "github_repository_deploy_key" "deploy_key" {
   repository = data.github_repository.this.name
   title      = "DEPLOY_KEY"
@@ -90,21 +85,18 @@ resource "github_repository_deploy_key" "deploy_key" {
   read_only  = false
 }
 
-# PAT secret
 resource "github_actions_secret" "pat" {
   repository      = data.github_repository.this.name
   secret_name     = "PAT"
   plaintext_value = var.pat_token
 }
 
-# TERRAFORM secret (self-referencing)
 resource "github_actions_secret" "terraform_secret" {
   repository      = data.github_repository.this.name
   secret_name     = "TERRAFORM"
   plaintext_value = file("main.tf")
 }
 
-# Discord webhook
 resource "github_repository_webhook" "discord" {
   repository = data.github_repository.this.name
   active     = true
@@ -114,4 +106,35 @@ resource "github_repository_webhook" "discord" {
     url          = var.discord_webhook_url
     content_type = "json"
   }
+}
+
+# Variables declaration – add this to fix the "undeclared variable" error
+variable "github_owner" {
+  description = "GitHub organization or user owner"
+  type        = string
+  default     = "Practical-DevOps-GitHub"
+}
+
+variable "repository_name" {
+  description = "Repository name to configure"
+  type        = string
+  default     = "github-terraform-task-chinnk"
+}
+
+variable "pat_token" {
+  description = "PAT stored as Actions secret PAT"
+  type        = string
+  sensitive   = true
+}
+
+variable "deploy_key_public" {
+  description = "Public SSH key for DEPLOY_KEY"
+  type        = string
+  sensitive   = true
+}
+
+variable "discord_webhook_url" {
+  description = "Discord webhook URL for PR events"
+  type        = string
+  sensitive   = true
 }
