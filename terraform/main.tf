@@ -37,7 +37,7 @@ resource "github_branch_protection" "develop" {
   }
 }
 
-# 4. Branch protection main — без approvals (0)
+# 4. Branch protection main — approvals (0)
 resource "github_branch_protection" "main" {
   repository_id                   = data.github_repository.this.node_id
   pattern                         = "main"
@@ -49,7 +49,7 @@ resource "github_branch_protection" "main" {
   required_pull_request_reviews {
     dismiss_stale_reviews           = true
     required_approving_review_count = 0
-    require_code_owner_reviews      = false
+    require_code_owner_reviews      = true  
   }
 }
 
