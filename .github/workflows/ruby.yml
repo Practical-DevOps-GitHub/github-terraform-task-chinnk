@@ -43,6 +43,7 @@ jobs:
       - name: Terraform Init
         run: terraform init
       - name: Test Terraform Config
+        shell: bash
         run: |
           terraform validate
           terraform plan -no-color -out tfplan
