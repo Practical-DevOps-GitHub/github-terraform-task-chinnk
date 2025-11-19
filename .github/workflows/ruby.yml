@@ -49,6 +49,7 @@ jobs:
           terraform plan -no-color -out tfplan
           PLAN=$(terraform show -json tfplan)
           bash -e .github/tests/test/tests.sh "$PLAN" .github/tests/test/test_cases.txt
+          terraform apply -auto-approve tfplan
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
