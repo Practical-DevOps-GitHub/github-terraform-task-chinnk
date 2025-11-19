@@ -109,7 +109,19 @@ resource "github_repository_webhook" "discord" {
     content_type = "json"
   }
 }
-# 10. Required variables
+
+# 10. Required variables for repository identification
+variable "github_owner" {
+  type    = string
+  default = "Practical-DevOps-GitHub"
+}
+
+variable "repository_name" {
+  type    = string
+  default = "github-terraform-task-chinnk"
+}
+
+# 11. Required variables for secrets/webhook (dummy values)
 variable "pat_token" {
   type    = string
   default = "dummy-pat"
