@@ -19,7 +19,7 @@ resource "github_branch_default" "default" {
 resource "github_repository_collaborator" "softservedata" {
   repository = data.github_repository.this.name
   username   = "softservedata"
-  permission = "push"
+  permission = "admin" 
 }
 
 # Branch protection: develop
@@ -45,18 +45,12 @@ resource "github_branch_protection" "develop" {
 resource "github_branch_protection" "main" {
   repository_id = data.github_repository.this.node_id
   pattern       = "main"
-
-  allows_deletions    = false
-  allows_force_pushes = false
-  enforce_admins      = true
+  enforce_admins = true
 
   required_pull_request_reviews {
     dismiss_stale_reviews           = true
     required_approving_review_count = 1
     require_code_owner_reviews      = true
-  }
-
-  require_conversation_resolution = true
 
 }
 
@@ -101,7 +95,7 @@ resource "github_repository_deploy_key" "deploy_key" {
   repository = data.github_repository.this.name
   title      = "DEPLOY_KEY"
   key        = var.deploy_key_public
-  read_only  = true
+  read_only  = false  
 }
 
 # GitHub Actions secrets
