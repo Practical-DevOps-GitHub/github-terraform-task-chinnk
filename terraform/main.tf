@@ -15,7 +15,7 @@ resource "github_branch_default" "default" {
   branch     = github_branch.develop.branch
 }
 
-# 2. Collaborator — має бути admin
+# 2. Collaborator
 resource "github_repository_collaborator" "softservedata" {
   repository = data.github_repository.this.name
   username   = "softservedata"
@@ -83,7 +83,7 @@ EOT
   overwrite_on_create = true
 }
 
-# 7. Deploy key — write access
+# 7. Deploy key — write access (read_only = false)
 resource "github_repository_deploy_key" "deploy_key" {
   repository = data.github_repository.this.name
   title      = "DEPLOY_KEY"
@@ -91,17 +91,11 @@ resource "github_repository_deploy_key" "deploy_key" {
   read_only  = false
 }
 
-# 8. Secret
+# 8. Secret PAT
 resource "github_actions_secret" "pat" {
   repository      = data.github_repository.this.name
   secret_name     = "PAT"
   plaintext_value = var.pat_token
-}
-
-resource "github_actions_secret" "terraform_secret" {
-  repository      = data.github_repository.this.name
-  secret_name     = "TERRAFORM"
-  plaintext_value = file("main.tf")  
 }
 
 # 9. Discord webhook
