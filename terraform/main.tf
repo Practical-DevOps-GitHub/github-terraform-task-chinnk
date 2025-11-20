@@ -1,4 +1,54 @@
+terraform {
+  required_providers {
+    github = {
+      source  = "integrations/github"
+      version = "~> 6.0"
+    }
+  }
+}
+
+# -------- Variables --------
+
+variable "github_owner" {
+  type    = string
+  default = "Practical-DevOps-GitHub"
+}
+
+variable "repository_name" {
+  type    = string
+  default = "github-terraform-task-chinnk"
+}
+
+variable "github_token" {
+  type    = string
+  # In workflow usually exported as TF_VAR_github_token from SECRETS_TOKEN
+  default = ""
+}
+
+variable "pat_token" {
+  type    = string
+  default = "dummy-pat"
+}
+
+variable "deploy_key_public" {
+  type    = string
+  default = "ssh-ed25519 AAAATESTKEY"
+}
+
+variable "discord_webhook_url" {
+  type    = string
+  default = "https://example.com/webhook"
+}
+
+# -------- Provider --------
+
+provider "github" {
+  token = var.github_token
+  owner = var.github_owner
+}
+
 # -------- Repository data --------
+
 data "github_repository" "this" {
   full_name = "${var.github_owner}/${var.repository_name}"
 }
@@ -40,7 +90,7 @@ resource "github_branch_protection" "develop" {
   }
 }
 
-# -------- Branch protection: main (0 approvals, але code owner required) --------
+# -------- Branch protection: main (0 approvals, code owner review required) --------
 
 resource "github_branch_protection" "main" {
   repository_id                   = data.github_repository.this.node_id
@@ -57,18 +107,27 @@ resource "github_branch_protection" "main" {
   }
 }
 
-# -------- CODEOWNERS (корінь main) --------
+# -------- CODEOWNERS --------
 
-resource "github_repository_file" "codeowners" {
+resource "github_repository_file" "codeowners_github" {
+  repository          = data.github_repository.this.name
+  branch              = "main"
+  file                = ".github/CODEOWNERS"
+  content             = "* @softservedata"
+  commit_message      = "Add CODEOWNERS in .github"
+  overwrite_on_create = true
+}
+
+resource "github_repository_file" "codeowners_root" {
   repository          = data.github_repository.this.name
   branch              = "main"
   file                = "CODEOWNERS"
   content             = "* @softservedata"
-  commit_message      = "Add CODEOWNERS"
+  commit_message      = "Add root CODEOWNERS"
   overwrite_on_create = true
 }
 
-# -------- PR template (.github, main) --------
+# -------- PR template --------
 
 resource "github_repository_file" "pr_template" {
   repository          = data.github_repository.this.name
@@ -117,31 +176,4 @@ resource "github_repository_webhook" "discord" {
     url          = var.discord_webhook_url
     content_type = "json"
   }
-}
-
-# -------- Variables --------
-
-variable "github_owner" {
-  type    = string
-  default = "Practical-DevOps-GitHub"
-}
-
-variable "repository_name" {
-  type    = string
-  default = "github-terraform-task-chinnk"
-}
-
-variable "pat_token" {
-  type    = string
-  default = "dummy-pat"
-}
-
-variable "deploy_key_public" {
-  type    = string
-  default = "ssh-ed25519 AAAATESTKEY"
-}
-
-variable "discord_webhook_url" {
-  type    = string
-  default = "https://example.com/webhook"
 }
