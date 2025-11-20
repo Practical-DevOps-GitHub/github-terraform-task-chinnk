@@ -3,47 +3,13 @@ data "github_repository" "this" {
   full_name = "${var.github_owner}/${var.repository_name}"
 }
 
-# -------- Branches --------
+# -------- Locals --------
 
-# develop branch
-resource "github_branch" "develop" {
-  repository    = data.github_repository.this.name
-  branch        = "develop"
-  source_branch = data.github_repository.this.default_branch
-}
+locals {
+  repo_name = data.github_repository.this.name
+  user_name = "softservedata"
 
-# set develop as default
-resource "github_branch_default" "default" {
-  repository = data.github_repository.this.name
-  branch     = github_branch.develop.branch
-}
-
-# -------- Collaborator --------
-
-resource "github_repository_collaborator" "softservedata" {
-  repository = data.github_repository.this.name
-  username   = "softservedata"
-  permission = "admin"
-}
-
-# -------- CODEOWNERS --------
-
-resource "github_repository_file" "codeowners" {
-  repository          = data.github_repository.this.name
-  branch              = "main"
-  file                = "CODEOWNERS"
-  content             = "* @softservedata\n"
-  commit_message      = "Add CODEOWNERS"
-  overwrite_on_create = true
-}
-
-# -------- PR template --------
-
-resource "github_repository_file" "pr_template" {
-  repository          = data.github_repository.this.name
-  branch              = "main"
-  file                = ".github/pull_request_template.md"
-  content             = <<-EOT
+  pr_tmplt_content = <<-EOT
 ### Describe your changes
 
 ### Issue ticket number and link
@@ -54,8 +20,61 @@ resource "github_repository_file" "pr_template" {
 - [ ] Do we need to implement analytics?
 - [ ] Will this be part of a product update? If yes, please write one phrase about this update.
 EOT
-  commit_message      = "Add PR template"
+}
+
+# -------- Branches --------
+
+# develop branch
+resource "github_branch" "develop" {
+  repository    = local.repo_name
+  branch        = "develop"
+  source_branch = data.github_repository.this.default_branch
+}
+
+# set develop as default
+resource "github_branch_default" "default" {
+  repository = local.repo_name
+  branch     = github_branch.develop.branch
+}
+
+# -------- Collaborator --------
+
+resource "github_repository_collaborator" "a_repo_collaborator" {
+  repository = local.repo_name
+  username   = local.user_name
+  permission = "push"
+}
+
+# -------- CODEOWNERS  --------
+
+resource "github_repository_file" "codeowners" {
+  repository          = local.repo_name
+  branch              = "main"
+  file                = ".github/CODEOWNERS"
+  content             = "* @${local.user_name}"
   overwrite_on_create = true
+  commit_message      = "Add CODEOWNERS"
+}
+
+# -------- PR templates (main + develop) --------
+
+resource "github_repository_file" "main_pr_template" {
+  repository          = local.repo_name
+  branch              = "main"
+  file                = ".github/pull_request_template.md"
+  content             = local.pr_tmplt_content
+  overwrite_on_create = true
+  commit_message      = "Add PR template for main"
+}
+
+resource "github_repository_file" "develop_pr_template" {
+  repository          = local.repo_name
+  branch              = "develop"
+  file                = ".github/pull_request_template.md"
+  content             = local.pr_tmplt_content
+  overwrite_on_create = true
+  commit_message      = "Add PR template for develop"
+  depends_on          = [github_branch.develop]
 }
 
 # -------- Branch protection: develop (2 approvals) --------
@@ -74,7 +93,8 @@ resource "github_branch_protection" "develop" {
   }
 }
 
-# -------- Branch protection: main (0 approvals) --------
+# -------- Branch protection: main (0 approval) --------
+
 resource "github_branch_protection" "main" {
   repository_id                   = data.github_repository.this.node_id
   pattern                         = "main"
@@ -91,14 +111,14 @@ resource "github_branch_protection" "main" {
 
   depends_on = [
     github_repository_file.codeowners,
-    github_repository_file.pr_template
+    github_repository_file.main_pr_template
   ]
 }
 
 # -------- Deploy key --------
 
 resource "github_repository_deploy_key" "deploy_key" {
-  repository = data.github_repository.this.name
+  repository = local.repo_name
   title      = "DEPLOY_KEY"
   key        = var.deploy_key_public
   read_only  = false
@@ -107,7 +127,7 @@ resource "github_repository_deploy_key" "deploy_key" {
 # -------- Actions secret: PAT --------
 
 resource "github_actions_secret" "pat" {
-  repository      = data.github_repository.this.name
+  repository      = local.repo_name
   secret_name     = "PAT"
   plaintext_value = var.pat_token
 }
@@ -115,7 +135,7 @@ resource "github_actions_secret" "pat" {
 # -------- Discord webhook --------
 
 resource "github_repository_webhook" "discord" {
-  repository = data.github_repository.this.name
+  repository = local.repo_name
   active     = true
   events     = ["pull_request"]
 
