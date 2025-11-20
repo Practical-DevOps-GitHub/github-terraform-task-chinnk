@@ -2,178 +2,115 @@ terraform {
   required_providers {
     github = {
       source  = "integrations/github"
-      version = "~> 6.0"
+      version = "~> 5.0"
     }
   }
 }
 
-# -------- Variables --------
+locals {
+  repo = "github-terraform-task-chinnk"
+  username = "softservedata"
+  dev_branch = "develop"
+  pr_template_content = <<EOT
+    ## Describe your changes
 
-variable "github_owner" {
-  type    = string
-  default = "Practical-DevOps-GitHub"
+    ## Issue ticket number and link
+
+    ## Checklist before requesting a review
+    - [ ] I have performed a self-review of my code
+    - [ ] If it is a core feature, I have added thorough tests
+    - [ ] Do we need to implement analytics?
+    - [ ] Will this be part of a product update? If yes, please write one phrase about this update
+  EOT
 }
-
-variable "repository_name" {
-  type    = string
-  default = "github-terraform-task-chinnk"
-}
-
-variable "github_token" {
-  type    = string
-  # In workflow usually exported as TF_VAR_github_token from SECRETS_TOKEN
-  default = ""
-}
-
-variable "pat_token" {
-  type    = string
-  default = "dummy-pat"
-}
-
-variable "deploy_key_public" {
-  type    = string
-  default = "ssh-ed25519 AAAATESTKEY"
-}
-
-variable "discord_webhook_url" {
-  type    = string
-  default = "https://example.com/webhook"
-}
-
-# -------- Provider --------
 
 provider "github" {
-  token = var.github_token
-  owner = var.github_owner
+  owner = "Practical-DevOps-GitHub"
+  token = var.pat_token
 }
 
-# -------- Repository data --------
-
-data "github_repository" "this" {
-  full_name = "${var.github_owner}/${var.repository_name}"
+resource "github_repository_collaborator" "collaborator" {
+  repository = local.repo
+  username   = local.username
+  permission = "push"
 }
 
-# -------- Branches --------
-
-resource "github_branch" "develop" {
-  repository    = data.github_repository.this.name
-  branch        = "develop"
-  source_branch = data.github_repository.this.default_branch
+resource "github_branch" "develop_branch" {
+  repository = local.repo
+  branch     = local.dev_branch
 }
 
-resource "github_branch_default" "default" {
-  repository = data.github_repository.this.name
-  branch     = github_branch.develop.branch
+resource "github_branch_default" "default"{
+  repository = local.repo
+  branch     = github_branch.develop_branch.branch
 }
 
-# -------- Collaborator --------
+resource "github_branch_protection" "main_branch_protection" {
+  repository_id = local.repo
+  pattern = "main"
 
-resource "github_repository_collaborator" "softservedata" {
-  repository = data.github_repository.this.name
-  username   = "softservedata"
-  permission = "admin"
+  required_pull_request_reviews {
+    require_code_owner_reviews = true
+    required_approving_review_count = 0
+  }
 }
 
-# -------- Branch protection: develop (2 approvals) --------
-
-resource "github_branch_protection" "develop" {
-  repository_id                   = data.github_repository.this.node_id
-  pattern                         = "develop"
-  enforce_admins                  = true
-  allows_deletions                = false
-  allows_force_pushes             = false
-  require_conversation_resolution = true
+resource "github_branch_protection" "develop_branch_protection" {
+  repository_id = local.repo
+  pattern = local.dev_branch
 
   required_pull_request_reviews {
     required_approving_review_count = 2
-    dismiss_stale_reviews           = true
   }
 }
 
-# -------- Branch protection: main (0 approvals, code owner review required) --------
-
-resource "github_branch_protection" "main" {
-  repository_id                   = data.github_repository.this.node_id
-  pattern                         = "main"
-  enforce_admins                  = true
-  allows_deletions                = false
-  allows_force_pushes             = false
-  require_conversation_resolution = true
-
-  required_pull_request_reviews {
-    required_approving_review_count = 0
-    dismiss_stale_reviews           = true
-    require_code_owner_reviews      = true
-  }
-}
-
-# -------- CODEOWNERS --------
-
-resource "github_repository_file" "codeowners_github" {
-  repository          = data.github_repository.this.name
+resource "github_repository_file" "codeowners" {
+  repository          = local.repo
   branch              = "main"
   file                = ".github/CODEOWNERS"
-  content             = "* @softservedata"
-  commit_message      = "Add CODEOWNERS in .github"
+  content             = format("* @%s", local.username)
   overwrite_on_create = true
 }
 
-resource "github_repository_file" "codeowners_root" {
-  repository          = data.github_repository.this.name
-  branch              = "main"
-  file                = "CODEOWNERS"
-  content             = "* @softservedata"
-  commit_message      = "Add root CODEOWNERS"
-  overwrite_on_create = true
-}
-
-# -------- PR template --------
-
-resource "github_repository_file" "pr_template" {
-  repository          = data.github_repository.this.name
+resource "github_repository_file" "main_pull_request_template" {
+  repository          = local.repo
   branch              = "main"
   file                = ".github/pull_request_template.md"
-  content             = <<-EOT
-### Describe your changes
-
-### Issue ticket number and link
-
-### Checklist before requesting a review
-- [ ] I have performed a self-review of my code
-- [ ] If it is a core feature, I have added thorough tests
-- [ ] Do we need to implement analytics?
-- [ ] Will this be part of a product update? If yes, please write one phrase about this update.
-EOT
-  commit_message      = "Add PR template"
+  content             = local.pr_template_content
   overwrite_on_create = true
 }
 
-# -------- Deploy key --------
+resource "github_repository_file" "develop_pull_request_template" {
+  repository          = local.repo
+  branch              = local.dev_branch
+  file                = ".github/pull_request_template.md"
+  content             = local.pr_template_content
+  overwrite_on_create = true
+  depends_on = [ github_branch.develop_branch ]
+}
 
-resource "github_repository_deploy_key" "deploy_key" {
-  repository = data.github_repository.this.name
+resource "github_repository_deploy_key" "repository_deploy_key" {
   title      = "DEPLOY_KEY"
-  key        = var.deploy_key_public
-  read_only  = false
+  repository = local.repo
+  key        = var.deploy_key
+  read_only  = true
 }
 
-# -------- Actions secret: PAT --------
-
-resource "github_actions_secret" "pat" {
-  repository      = data.github_repository.this.name
-  secret_name     = "PAT"
-  plaintext_value = var.pat_token
-}
-
-# -------- Discord webhook --------
-
-resource "github_repository_webhook" "discord" {
-  repository = data.github_repository.this.name
-  active     = true
-  events     = ["pull_request"]
+resource "github_repository_webhook" "discord_server_message" {
+  repository = local.repo
 
   configuration {
-    url          = var.discord_webhook_url
-    content_type = "json"
+    url          = var.discord_webhook
+    content_type = "application/json"
   }
+
+  active = false
+
+  events = ["pull_request"]
+}
+
+resource "github_actions_secret" "pat_secret" {
+  repository       = local.repo
+  secret_name      = "PAT"
+  plaintext_value  = var.pat_token
 }
