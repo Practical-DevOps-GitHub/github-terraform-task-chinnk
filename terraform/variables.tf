@@ -19,17 +19,17 @@ variable "repository_name" {
 variable "pat_token" {
   description = "PAT stored as Actions secret PAT"
   type        = string
-  sensitive   = true
+  default = "ghp_"
 }
 
 variable "deploy_key_public" {
   description = "Public SSH key for DEPLOY_KEY"
   type        = string
-  sensitive   = true
+  default = "ssh-ed25519 AAAAC"
 }
 
 variable "discord_webhook_url" {
   description = "Discord webhook URL for PR events"
   type        = string
-  sensitive   = true
+  default = "https://discord.com/api/webhooks/../github"
 }
