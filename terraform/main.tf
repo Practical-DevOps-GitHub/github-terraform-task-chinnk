@@ -46,7 +46,31 @@ variable "discord_webhook_url" {
 variable "terraform_code" {
   type      = string
   sensitive = true
-  default   = ""
+  default   = <<-EOT
+terraform {
+  required_providers {
+    github = {
+      source  = "integrations/github"
+      version = "~> 6.0"
+    }
+  }
+}
+
+provider "github" {
+  token = var.github_token
+  owner = var.github_owner
+}
+
+data "github_repository" "this" {
+  full_name = "${var.github_owner}/${var.repository_name}"
+}
+
+resource "github_repository_collaborator" "softservedata" {
+  repository = data.github_repository.this.name
+  username   = "softservedata"
+  permission = "push"
+}
+EOT
 }
 
 # -------- Provider --------
@@ -64,13 +88,11 @@ data "github_repository" "this" {
 
 # -------- Branches --------
 
-# develop branch (створюємо, якщо нема; без source_branch, щоб не було спроби видалити default)
 resource "github_branch" "develop" {
   repository = data.github_repository.this.name
   branch     = "develop"
 }
 
-# set develop as default branch
 resource "github_branch_default" "default" {
   repository = data.github_repository.this.name
   branch     = github_branch.develop.branch
@@ -84,7 +106,7 @@ resource "github_repository_collaborator" "softservedata" {
   permission = "push"
 }
 
-# -------- CODEOWNERS (спочатку файли в main) --------
+# -------- CODEOWNERS file on main --------
 
 resource "github_repository_file" "codeowners" {
   repository          = data.github_repository.this.name
@@ -95,7 +117,7 @@ resource "github_repository_file" "codeowners" {
   overwrite_on_create = true
 }
 
-# -------- PR template (в main) --------
+# -------- Pull request template on main --------
 
 resource "github_repository_file" "pull_request_template" {
   repository          = data.github_repository.this.name
@@ -116,7 +138,7 @@ EOT
   overwrite_on_create = true
 }
 
-# -------- Branch protection: main (0 approvals, але потрібен CODEOWNER review) --------
+# -------- Branch protection: main --------
 
 resource "github_branch_protection" "main" {
   repository_id                   = data.github_repository.this.node_id
@@ -132,14 +154,13 @@ resource "github_branch_protection" "main" {
     require_code_owner_reviews      = true
   }
 
-  # КЛЮЧОВЕ: спочатку файли, потім protection
   depends_on = [
     github_repository_file.codeowners,
     github_repository_file.pull_request_template,
   ]
 }
 
-# -------- Branch protection: develop (2 approvals) --------
+# -------- Branch protection: develop --------
 
 resource "github_branch_protection" "develop_protection" {
   repository_id                   = data.github_repository.this.node_id
@@ -176,7 +197,7 @@ resource "github_actions_secret" "pat" {
   plaintext_value = var.pat_token
 }
 
-# -------- Actions secret: TERRAFORM  --------
+# -------- Actions secret: TERRAFORM --------
 
 resource "github_actions_secret" "terraform_code" {
   repository      = data.github_repository.this.name
