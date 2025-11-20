@@ -26,45 +26,13 @@ resource "github_repository_collaborator" "softservedata" {
   permission = "admin"
 }
 
-# -------- Branch protection: develop (2 approvals) --------
-
-resource "github_branch_protection" "develop" {
-  repository_id                   = data.github_repository.this.node_id
-  pattern                         = "develop"
-  enforce_admins                  = true
-  allows_deletions                = false
-  allows_force_pushes             = false
-  require_conversation_resolution = true
-
-  required_pull_request_reviews {
-    required_approving_review_count = 2
-    dismiss_stale_reviews           = true
-  }
-}
-
-resource "github_branch_protection" "main" {
-  repository_id = data.github_repository.this.node_id
-  pattern       = "main"
-
-  enforce_admins       = true
-  allows_deletions     = false
-  allows_force_pushes  = false
-  require_conversation_resolution = true
-
-  required_pull_request_reviews {
-    required_approving_review_count = 1
-    dismiss_stale_reviews           = true
-    require_code_owner_reviews      = true
-  }
-}
-
 # -------- CODEOWNERS --------
 
 resource "github_repository_file" "codeowners" {
   repository          = data.github_repository.this.name
   branch              = "main"
-  file                = ".github/CODEOWNERS"
-  content             = "* @softservedata"
+  file                = "CODEOWNERS"
+  content             = "* @softservedata\n"
   commit_message      = "Add CODEOWNERS"
   overwrite_on_create = true
 }
@@ -88,6 +56,43 @@ resource "github_repository_file" "pr_template" {
 EOT
   commit_message      = "Add PR template"
   overwrite_on_create = true
+}
+
+# -------- Branch protection: develop (2 approvals) --------
+
+resource "github_branch_protection" "develop" {
+  repository_id                   = data.github_repository.this.node_id
+  pattern                         = "develop"
+  enforce_admins                  = true
+  allows_deletions                = false
+  allows_force_pushes             = false
+  require_conversation_resolution = true
+
+  required_pull_request_reviews {
+    required_approving_review_count = 2
+    dismiss_stale_reviews           = true
+  }
+}
+
+# -------- Branch protection: main (0 approvals) --------
+resource "github_branch_protection" "main" {
+  repository_id                   = data.github_repository.this.node_id
+  pattern                         = "main"
+  enforce_admins                  = true
+  allows_deletions                = false
+  allows_force_pushes             = false
+  require_conversation_resolution = true
+
+  required_pull_request_reviews {
+    required_approving_review_count = 0
+    dismiss_stale_reviews           = true
+    require_code_owner_reviews      = true
+  }
+
+  depends_on = [
+    github_repository_file.codeowners,
+    github_repository_file.pr_template
+  ]
 }
 
 # -------- Deploy key --------
