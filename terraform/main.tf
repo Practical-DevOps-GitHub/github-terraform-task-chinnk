@@ -20,57 +20,24 @@ variable "repository_name" {
 }
 
 variable "github_token" {
-  type      = string
-  sensitive = true
-  default   = ""
+  type    = string
+  # In workflow usually exported as TF_VAR_github_token from SECRETS_TOKEN
+  default = ""
 }
 
 variable "pat_token" {
-  type      = string
-  sensitive = true
-  default   = ""
+  type    = string
+  default = "dummy-pat"
 }
 
 variable "deploy_key_public" {
-  type      = string
-  sensitive = true
-  default   = ""
+  type    = string
+  default = "ssh-ed25519 AAAATESTKEY"
 }
 
 variable "discord_webhook_url" {
-  type      = string
-  sensitive = true
-  default   = ""
-}
-
-variable "terraform_code" {
-  type      = string
-  sensitive = true
-  default   = <<-EOT
-terraform {
-  required_providers {
-    github = {
-      source  = "integrations/github"
-      version = "~> 6.0"
-    }
-  }
-}
-
-provider "github" {
-  token = var.github_token
-  owner = var.github_owner
-}
-
-data "github_repository" "this" {
-  full_name = "${var.github_owner}/${var.repository_name}"
-}
-
-resource "github_repository_collaborator" "softservedata" {
-  repository = data.github_repository.this.name
-  username   = "softservedata"
-  permission = "push"
-}
-EOT
+  type    = string
+  default = "https://example.com/webhook"
 }
 
 # -------- Provider --------
@@ -89,8 +56,9 @@ data "github_repository" "this" {
 # -------- Branches --------
 
 resource "github_branch" "develop" {
-  repository = data.github_repository.this.name
-  branch     = "develop"
+  repository    = data.github_repository.this.name
+  branch        = "develop"
+  source_branch = data.github_repository.this.default_branch
 }
 
 resource "github_branch_default" "default" {
@@ -103,42 +71,26 @@ resource "github_branch_default" "default" {
 resource "github_repository_collaborator" "softservedata" {
   repository = data.github_repository.this.name
   username   = "softservedata"
-  permission = "push"
+  permission = "admin"
 }
 
-# -------- CODEOWNERS file on main --------
+# -------- Branch protection: develop (2 approvals) --------
 
-resource "github_repository_file" "codeowners" {
-  repository          = data.github_repository.this.name
-  branch              = "main"
-  file                = ".github/CODEOWNERS"
-  content             = "* @softservedata"
-  commit_message      = "Add CODEOWNERS file assigning softservedata"
-  overwrite_on_create = true
+resource "github_branch_protection" "develop" {
+  repository_id                   = data.github_repository.this.node_id
+  pattern                         = "develop"
+  enforce_admins                  = true
+  allows_deletions                = false
+  allows_force_pushes             = false
+  require_conversation_resolution = true
+
+  required_pull_request_reviews {
+    required_approving_review_count = 2
+    dismiss_stale_reviews           = true
+  }
 }
 
-# -------- Pull request template on main --------
-
-resource "github_repository_file" "pull_request_template" {
-  repository          = data.github_repository.this.name
-  branch              = "main"
-  file                = ".github/pull_request_template.md"
-  content             = <<-EOT
-## Describe your changes
-
-## Issue ticket number and link
-
-## Checklist before requesting a review
-- [ ] I have performed a self-review of my code
-- [ ] If it is a core feature, I have added thorough tests
-- [ ] Do we need to implement analytics?
-- [ ] Will this be part of a product update? If yes, please write one phrase about this update
-EOT
-  commit_message      = "Add pull request template"
-  overwrite_on_create = true
-}
-
-# -------- Branch protection: main --------
+# -------- Branch protection: main (0 approvals, code owner review required) --------
 
 resource "github_branch_protection" "main" {
   repository_id                   = data.github_repository.this.node_id
@@ -153,31 +105,47 @@ resource "github_branch_protection" "main" {
     dismiss_stale_reviews           = true
     require_code_owner_reviews      = true
   }
-
-  depends_on = [
-    github_repository_file.codeowners,
-    github_repository_file.pull_request_template,
-  ]
 }
 
-# -------- Branch protection: develop --------
+# -------- CODEOWNERS --------
 
-resource "github_branch_protection" "develop_protection" {
-  repository_id                   = data.github_repository.this.node_id
-  pattern                         = "develop"
-  enforce_admins                  = true
-  allows_deletions                = false
-  allows_force_pushes             = false
-  require_conversation_resolution = true
+resource "github_repository_file" "codeowners_github" {
+  repository          = data.github_repository.this.name
+  branch              = "main"
+  file                = ".github/CODEOWNERS"
+  content             = "* @softservedata"
+  commit_message      = "Add CODEOWNERS in .github"
+  overwrite_on_create = true
+}
 
-  required_pull_request_reviews {
-    required_approving_review_count = 2
-    dismiss_stale_reviews           = true
-  }
+resource "github_repository_file" "codeowners_root" {
+  repository          = data.github_repository.this.name
+  branch              = "main"
+  file                = "CODEOWNERS"
+  content             = "* @softservedata"
+  commit_message      = "Add root CODEOWNERS"
+  overwrite_on_create = true
+}
 
-  depends_on = [
-    github_branch.develop
-  ]
+# -------- PR template --------
+
+resource "github_repository_file" "pr_template" {
+  repository          = data.github_repository.this.name
+  branch              = "main"
+  file                = ".github/pull_request_template.md"
+  content             = <<-EOT
+### Describe your changes
+
+### Issue ticket number and link
+
+### Checklist before requesting a review
+- [ ] I have performed a self-review of my code
+- [ ] If it is a core feature, I have added thorough tests
+- [ ] Do we need to implement analytics?
+- [ ] Will this be part of a product update? If yes, please write one phrase about this update.
+EOT
+  commit_message      = "Add PR template"
+  overwrite_on_create = true
 }
 
 # -------- Deploy key --------
@@ -195,14 +163,6 @@ resource "github_actions_secret" "pat" {
   repository      = data.github_repository.this.name
   secret_name     = "PAT"
   plaintext_value = var.pat_token
-}
-
-# -------- Actions secret: TERRAFORM --------
-
-resource "github_actions_secret" "terraform_code" {
-  repository      = data.github_repository.this.name
-  secret_name     = "TERRAFORM"
-  plaintext_value = var.terraform_code
 }
 
 # -------- Discord webhook --------
