@@ -1,4 +1,23 @@
+terraform {
+  required_providers {
+    github = {
+      source  = "integrations/github"
+      version = "~> 6.0"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
+  }
+}
+
+provider "github" {
+  owner = var.github_owner
+
+}
+
 # -------- Repository data --------
+
 data "github_repository" "this" {
   full_name = "${var.github_owner}/${var.repository_name}"
 }
@@ -20,11 +39,23 @@ locals {
 - [ ] Do we need to implement analytics?
 - [ ] Will this be part of a product update? If yes, please write one phrase about this update.
 EOT
+
+  codeowners_content = <<-EOT
+* @softservedata
+EOT
+}
+
+# -------- Collaborator --------
+
+resource "github_repository_collaborator" "softservedata" {
+  repository = local.repo_name
+  username   = local.user_name
+  permission = "push"
 }
 
 # -------- Branches --------
 
-# develop branch
+# develop branch 
 resource "github_branch" "develop" {
   repository    = local.repo_name
   branch        = "develop"
@@ -37,137 +68,125 @@ resource "github_branch_default" "default" {
   branch     = github_branch.develop.branch
 }
 
-# -------- Collaborator --------
+# -------- Pull request template & CODEOWNERS --------
 
-resource "github_repository_collaborator" "a_repo_collaborator" {
-  repository = local.repo_name
-  username   = local.user_name
-  permission = "push"
+resource "github_repository_file" "pull_request_template" {
+  repository          = local.repo_name
+  file                = ".github/pull_request_template.md"
+  content             = local.pr_tmplt_content
+  branch              = data.github_repository.this.default_branch
+  commit_message      = "Add pull request template"
+  overwrite_on_create = true
 }
-
-# -------- CODEOWNERS  --------
 
 resource "github_repository_file" "codeowners" {
   repository          = local.repo_name
-  branch              = "main"
   file                = ".github/CODEOWNERS"
-  content             = "* @${local.user_name}"
+  content             = local.codeowners_content
+  branch              = data.github_repository.this.default_branch
+  commit_message      = "Add CODEOWNERS for repository"
   overwrite_on_create = true
-  commit_message      = "Add CODEOWNERS"
 }
 
-# -------- PR templates (main + develop) --------
+# -------- Branch protection: develop --------
 
-resource "github_repository_file" "main_pr_template" {
-  repository          = local.repo_name
-  branch              = "main"
-  file                = ".github/pull_request_template.md"
-  content             = local.pr_tmplt_content
-  overwrite_on_create = true
-  commit_message      = "Add PR template for main"
-}
+resource "github_branch_protection" "develop_protection" {
+  repository_id  = data.github_repository.this.node_id
+  pattern        = "develop"
+  enforce_admins = true
 
-resource "github_repository_file" "develop_pr_template" {
-  repository          = local.repo_name
-  branch              = "develop"
-  file                = ".github/pull_request_template.md"
-  content             = local.pr_tmplt_content
-  overwrite_on_create = true
-  commit_message      = "Add PR template for develop"
-  depends_on          = [github_branch.develop]
-}
-
-# -------- Branch protection: develop (2 approvals) --------
-
-resource "github_branch_protection" "develop" {
-  repository_id                   = data.github_repository.this.node_id
-  pattern                         = "develop"
-  enforce_admins                  = true
-  allows_deletions                = false
-  allows_force_pushes             = false
-  require_conversation_resolution = true
+  allows_deletions    = false
+  allow_force_pushes  = false
+  require_signed_commits = false
 
   required_pull_request_reviews {
     required_approving_review_count = 2
-    dismiss_stale_reviews           = true
+    require_code_owner_reviews      = false
   }
+
+  required_status_checks {
+    strict   = false
+    contexts = []
+  }
+
+  push_restrictions = []
 }
 
-# -------- Branch protection: main (0 approval) --------
+# -------- Branch protection: main --------
 
-resource "github_branch_protection" "main" {
-  repository_id                   = data.github_repository.this.node_id
-  pattern                         = "main"
-  enforce_admins                  = true
-  allows_deletions                = false
-  allows_force_pushes             = false
-  require_conversation_resolution = true
+resource "github_branch_protection" "main_protection" {
+  repository_id  = data.github_repository.this.node_id
+  pattern        = "main"
+  enforce_admins = true
+
+  allows_deletions    = false
+  allow_force_pushes  = false
+  require_signed_commits = false
 
   required_pull_request_reviews {
-    required_approving_review_count = 0
-    dismiss_stale_reviews           = true
+    required_approving_review_count = 1
     require_code_owner_reviews      = true
   }
 
-  depends_on = [
-    github_repository_file.codeowners,
-    github_repository_file.main_pr_template
-  ]
+  required_status_checks {
+    strict   = false
+    contexts = []
+  }
+
+  push_restrictions = []
 }
 
-# -------- Deploy key --------
+# -------- Deploy key (DEPLOY_KEY) --------
+
+resource "tls_private_key" "deploy_key" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
 
 resource "github_repository_deploy_key" "deploy_key" {
-  repository = local.repo_name
   title      = "DEPLOY_KEY"
-  key        = var.deploy_key_public
-  read_only  = false
+  repository = local.repo_name
+  key        = tls_private_key.deploy_key.public_key_openssh
+  read_only  = true
 }
 
-# -------- Actions secret: PAT --------
 
+output "deploy_key_private" {
+  description = "Private part of the deploy key "
+  value       = tls_private_key.deploy_key.private_key_pem
+  sensitive   = true
+}
+
+# -------- GitHub Actions secrets --------
+
+# 1) PAT для GitHub Actions
 resource "github_actions_secret" "pat" {
   repository      = local.repo_name
   secret_name     = "PAT"
-  plaintext_value = var.pat_token
+  plaintext_value = var.pat_for_actions
 }
 
-# -------- Discord webhook --------
+# 2) TERRAFORM
+resource "github_actions_secret" "terraform_code" {
+  repository      = local.repo_name
+  secret_name     = "TERRAFORM"
+  plaintext_value = file("${path.module}/main.tf")
+}
 
-resource "github_repository_webhook" "discord" {
+# -------- Discord webhook for PR events --------
+
+resource "github_repository_webhook" "discord_pr_notifications" {
   repository = local.repo_name
-  active     = true
-  events     = ["pull_request"]
 
   configuration {
     url          = var.discord_webhook_url
     content_type = "json"
+    insecure_ssl = false
   }
-}
 
-# -------- Variables --------
+  events = [
+    "pull_request"
+  ]
 
-variable "github_owner" {
-  type    = string
-  default = "Practical-DevOps-GitHub"
-}
-
-variable "repository_name" {
-  type    = string
-  default = "github-terraform-task-chinnk"
-}
-
-variable "pat_token" {
-  type    = string
-  default = "dummy-pat"
-}
-
-variable "deploy_key_public" {
-  type    = string
-  default = "ssh-ed25519 AAAATESTKEY"
-}
-
-variable "discord_webhook_url" {
-  type    = string
-  default = "https://example.com/webhook"
+  active = true
 }
