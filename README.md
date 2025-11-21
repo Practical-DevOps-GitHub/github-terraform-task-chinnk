@@ -11,7 +11,7 @@ Write Terraform code that configures the GitHub repository according to the foll
 - merging into the `develop` branch is allowed only if there are two approvals
 - merging into the `main` branch is allowed only if the owner has approved the pull request
 - assign the user `softservedata` as the code owner for all the files in the `main` branch
-4. A pull request template (pull_request_template.md) should be added to the `.github` directory to allow users to create an issue in the required format:
+4. A pull request template (pull_request_template.md)  should be added to the `.github` directory to allow users to create an issue in the required format:
 
 ## Describe your changes
 
